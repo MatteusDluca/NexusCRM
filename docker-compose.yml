@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: nexus_db
+    environment:
+      POSTGRES_USER: nexususer
+      POSTGRES_PASSWORD: nexuspassword
+      POSTGRES_DB: nexusboard
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U nexususer -d nexusboard" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: nexus_backend
+    environment:
+      - DATABASE_URL=postgresql://nexususer:nexuspassword@db:5432/nexusboard
+      - JWT_SECRET_KEY=super-secret-key-change-in-production-please-2024
+      - JWT_ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=1440 # 24 horas pro teste
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Mapeamento do código para desenvolvimento local hot-reload
+      - ./backend:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload # Override the CMD from Dockerfile for dev mode
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
